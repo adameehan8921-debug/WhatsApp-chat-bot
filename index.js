@@ -1,3 +1,6 @@
+const fs = require('fs');
+const path = require('path');
+
 const { default: makeWASocket, DisconnectReason, useMultiFileAuthState } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
@@ -10,19 +13,36 @@ const token = process.env.TELEGRAM_TOKEN || '8701301869:AAGiFFPQOk-gxZfIm5Irnfv5
 const chatId = process.env.CHAT_ID || '8142078717';
 // ---------------
 
+// ✅ Telegram bot
 const bot = new TelegramBot(token, { polling: true });
 
+// ✅ Express server
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Health check
 app.get('/', (req, res) => res.send('✅ WhatsApp Bot Running'));
 app.listen(port, () => console.log(`🌐 Server running on port ${port}`));
 
+// 🔥 Smart session path (auto fix)
+function getSessionPath() {
+    const dataPath = '/data/auth_info_baileys';
+
+    try {
+        // check if /data writable
+        fs.mkdirSync('/data', { recursive: true });
+        console.log('📁 Using persistent disk: /data');
+        return dataPath;
+    } catch (err) {
+        console.log('⚠️ /data not available, using local folder');
+        return './auth_info_baileys';
+    }
+}
+
 async function connectToWhatsApp() {
 
-    // 🔥 IMPORTANT: persistent path
-    const { state, saveCreds } = await useMultiFileAuthState('/data/auth_info_baileys');
+    const sessionPath = getSessionPath();
+
+    const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
 
     const sock = makeWASocket({
         auth: state,
@@ -37,7 +57,7 @@ async function connectToWhatsApp() {
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
-        // 📲 QR → Telegram
+        // 📲 QR → Telegram (only once)
         if (qr && !qrSent) {
             qrSent = true;
             console.log('📤 Sending QR to Telegram...');
@@ -51,6 +71,7 @@ async function connectToWhatsApp() {
             }
         }
 
+        // 🔌 Disconnect handling
         if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
 
@@ -72,6 +93,7 @@ async function connectToWhatsApp() {
         }
     });
 
+    // 📩 Message handler
     sock.ev.on('messages.upsert', async ({ messages }) => {
         try {
             const msg = messages[0];
@@ -84,7 +106,9 @@ async function connectToWhatsApp() {
                 '';
 
             if (text.toLowerCase().includes('hi')) {
-                await sock.sendMessage(msg.key.remoteJid, { text: 'Hello 👋' });
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: 'Hello 👋'
+                });
             }
 
         } catch (err) {
@@ -93,4 +117,5 @@ async function connectToWhatsApp() {
     });
 }
 
+// 🚀 Start bot
 connectToWhatsApp();
