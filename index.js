@@ -8,27 +8,24 @@ const TelegramBot = require('node-telegram-bot-api');
 const QRCode = require('qrcode');
 
 // --- CONFIG ---
-const token = process.env.TELEGRAM_TOKEN || '8635875959:AAFHHj5-DiI4lQ0AiebLa0BcyTwgq51-omM';
-const chatId = process.env.CHAT_ID || '8481555738';
+const token = '8635875959:AAFHHj5-DiI4lQ0AiebLa0BcyTwgq51-omM';
+const chatId = '8481555738';
 // ---------------
 
-// ✅ Telegram bot (409 FIX)
-const bot = new TelegramBot(token, {
-    polling: {
-        autoStart: false
-    }
-});
+// ✅ Telegram bot
+const bot = new TelegramBot(token, { polling: false });
 
-// 🔥 clear old sessions + start polling safely
-(async () => {
+async function startTelegram() {
     try {
-        await bot.deleteWebHook(); // remove webhook
-        await bot.startPolling();  // start clean polling
-        console.log('✅ Telegram bot polling started (fixed)');
+        await bot.deleteWebHook().catch(() => {});
+        await bot.startPolling();
+        console.log('✅ Telegram started');
     } catch (err) {
-        console.error('❌ Telegram init error:', err.message);
+        console.error('❌ Telegram error:', err.message);
+        setTimeout(startTelegram, 5000);
     }
-})();
+}
+startTelegram();
 
 // ✅ Express server
 const app = express();
@@ -37,25 +34,19 @@ const port = process.env.PORT || 3000;
 app.get('/', (req, res) => res.send('✅ WhatsApp Bot Running'));
 app.listen(port, () => console.log(`🌐 Server running on port ${port}`));
 
-// 🔥 Smart session path (auto fix)
+// 🔥 Session path
 function getSessionPath() {
-    const dataPath = '/data/auth_info_baileys';
-
     try {
         fs.mkdirSync('/data', { recursive: true });
-        console.log('📁 Using persistent disk: /data');
-        return dataPath;
-    } catch (err) {
-        console.log('⚠️ /data not available, using local folder');
+        return '/data/auth_info_baileys';
+    } catch {
         return './auth_info_baileys';
     }
 }
 
 async function connectToWhatsApp() {
 
-    const sessionPath = getSessionPath();
-
-    const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+    const { state, saveCreds } = await useMultiFileAuthState(getSessionPath());
 
     const sock = makeWASocket({
         auth: state,
@@ -70,36 +61,42 @@ async function connectToWhatsApp() {
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
-        // 📲 QR → Telegram
+        // 📲 QR → PNG → Telegram
         if (qr && !qrSent) {
             qrSent = true;
-            console.log('📤 Sending QR to Telegram...');
+
             try {
-                const qrBuffer = await QRCode.toBuffer(qr);
-                await bot.sendPhoto(chatId, qrBuffer, {
+                const filePath = './qr.png';
+
+                // ✅ Generate PNG file
+                await QRCode.toFile(filePath, qr);
+
+                // ✅ Send as file (better than buffer)
+                await bot.sendPhoto(chatId, fs.createReadStream(filePath), {
                     caption: '📱 Scan this QR to login WhatsApp'
                 });
+
+                console.log('📤 QR PNG sent to Telegram');
+
+                // 🧹 optional: delete file after send
+                fs.unlinkSync(filePath);
+
             } catch (err) {
-                console.error('❌ Telegram error:', err);
+                console.error('❌ QR send error:', err.message);
             }
         }
 
-        // 🔌 Disconnect
         if (connection === 'close') {
             qrSent = false;
 
-            const statusCode = lastDisconnect?.error?.output?.statusCode;
-
             const shouldReconnect = (lastDisconnect?.error instanceof Boom)
-                ? statusCode !== DisconnectReason.loggedOut
+                ? lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut
                 : true;
-
-            console.log('⚠️ Connection closed:', statusCode);
 
             if (shouldReconnect) {
                 setTimeout(connectToWhatsApp, 5000);
             } else {
-                console.log('❌ Logged out! Delete session folder.');
+                console.log('❌ Logged out!');
             }
 
         } else if (connection === 'open') {
@@ -108,7 +105,7 @@ async function connectToWhatsApp() {
         }
     });
 
-    // 📩 Messages
+    // 📩 Auto reply
     sock.ev.on('messages.upsert', async ({ messages }) => {
         try {
             const msg = messages[0];
@@ -132,5 +129,4 @@ async function connectToWhatsApp() {
     });
 }
 
-// 🚀 Start
 connectToWhatsApp();
