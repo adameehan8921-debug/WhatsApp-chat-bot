@@ -1,5 +1,4 @@
 const fs = require('fs');
-const path = require('path');
 
 const { default: makeWASocket, DisconnectReason, useMultiFileAuthState } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
@@ -28,7 +27,6 @@ function getSessionPath() {
     const dataPath = '/data/auth_info_baileys';
 
     try {
-        // check if /data writable
         fs.mkdirSync('/data', { recursive: true });
         console.log('📁 Using persistent disk: /data');
         return dataPath;
@@ -46,7 +44,7 @@ async function connectToWhatsApp() {
 
     const sock = makeWASocket({
         auth: state,
-        printQRInTerminal: True,
+        printQRInTerminal: true, // ✅ FIXED
         logger: pino({ level: 'silent' })
     });
 
@@ -73,6 +71,8 @@ async function connectToWhatsApp() {
 
         // 🔌 Disconnect handling
         if (connection === 'close') {
+            qrSent = false; // 🔥 reset QR on reconnect
+
             const statusCode = lastDisconnect?.error?.output?.statusCode;
 
             const shouldReconnect = (lastDisconnect?.error instanceof Boom)
