@@ -12,8 +12,23 @@ const token = process.env.TELEGRAM_TOKEN || '8701301869:AAGiFFPQOk-gxZfIm5Irnfv5
 const chatId = process.env.CHAT_ID || '8142078717';
 // ---------------
 
-// ✅ Telegram bot
-const bot = new TelegramBot(token, { polling: true });
+// ✅ Telegram bot (409 FIX)
+const bot = new TelegramBot(token, {
+    polling: {
+        autoStart: false
+    }
+});
+
+// 🔥 clear old sessions + start polling safely
+(async () => {
+    try {
+        await bot.deleteWebHook(); // remove webhook
+        await bot.startPolling();  // start clean polling
+        console.log('✅ Telegram bot polling started (fixed)');
+    } catch (err) {
+        console.error('❌ Telegram init error:', err.message);
+    }
+})();
 
 // ✅ Express server
 const app = express();
@@ -44,7 +59,7 @@ async function connectToWhatsApp() {
 
     const sock = makeWASocket({
         auth: state,
-        printQRInTerminal: true, // ✅ FIXED
+        printQRInTerminal: true,
         logger: pino({ level: 'silent' })
     });
 
@@ -55,7 +70,7 @@ async function connectToWhatsApp() {
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
-        // 📲 QR → Telegram (only once)
+        // 📲 QR → Telegram
         if (qr && !qrSent) {
             qrSent = true;
             console.log('📤 Sending QR to Telegram...');
@@ -69,9 +84,9 @@ async function connectToWhatsApp() {
             }
         }
 
-        // 🔌 Disconnect handling
+        // 🔌 Disconnect
         if (connection === 'close') {
-            qrSent = false; // 🔥 reset QR on reconnect
+            qrSent = false;
 
             const statusCode = lastDisconnect?.error?.output?.statusCode;
 
@@ -93,7 +108,7 @@ async function connectToWhatsApp() {
         }
     });
 
-    // 📩 Message handler
+    // 📩 Messages
     sock.ev.on('messages.upsert', async ({ messages }) => {
         try {
             const msg = messages[0];
@@ -117,5 +132,5 @@ async function connectToWhatsApp() {
     });
 }
 
-// 🚀 Start bot
+// 🚀 Start
 connectToWhatsApp();
