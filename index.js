@@ -7,13 +7,23 @@ const express = require('express');
 const TelegramBot = require('node-telegram-bot-api');
 const QRCode = require('qrcode');
 
-// --- CONFIG ---
-const token = '8782721674:AAHdYo7wxyJfhd7_3DJ3FYb6nj1i0CqDuWg';
+// --- CONFIG (DIRECT VALUES) ---
+const token = '8644363775:AAGE3rPVm9Gf1Vf8YMl9ctmiHhOTrIUfDtk';
 const chatId = '8481555738';
-// ---------------
+// -----------------------------
 
-// ✅ Telegram bot
-const bot = new TelegramBot(token, { polling: true });
+// ✅ Telegram bot (safe start to avoid 409)
+const bot = new TelegramBot(token, { polling: false });
+
+(async () => {
+    try {
+        await bot.deleteWebHook().catch(() => {});
+        await bot.startPolling();
+        console.log('✅ Telegram started');
+    } catch (err) {
+        console.error('❌ Telegram error:', err.message);
+    }
+})();
 
 // ✅ Express server
 const app = express();
@@ -22,13 +32,13 @@ const port = process.env.PORT || 3000;
 app.get('/', (req, res) => res.send('✅ WhatsApp Bot Running'));
 app.listen(port, () => console.log(`🌐 Server running on port ${port}`));
 
-// 🔥 Session path
+// 🔥 New session (fix 405 permanently)
 function getSessionPath() {
     try {
         fs.mkdirSync('/data', { recursive: true });
-        return '/data/auth_info_baileys';
+        return '/data/auth_info_baileys_v3'; // 🔥 new session
     } catch {
-        return './auth_info_baileys';
+        return './auth_info_baileys_v3';
     }
 }
 
@@ -47,7 +57,7 @@ async function connectToWhatsApp() {
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
-        // 🔥 ALWAYS send QR
+        // 🔥 ALWAYS send QR to Telegram
         if (qr) {
             console.log('📲 QR generated');
 
@@ -57,7 +67,7 @@ async function connectToWhatsApp() {
                 await QRCode.toFile(filePath, qr);
 
                 await bot.sendPhoto(chatId, fs.createReadStream(filePath), {
-                    caption: '📱 Scan quickly (QR expires fast)'
+                    caption: '📱 Scan this QR FAST ⚡'
                 });
 
                 fs.unlink(filePath, () => {});
@@ -78,9 +88,10 @@ async function connectToWhatsApp() {
                 : true;
 
             if (shouldReconnect) {
-                setTimeout(connectToWhatsApp, 3000);
+                console.log('🔁 Reconnecting...');
+                setTimeout(connectToWhatsApp, 4000);
             } else {
-                console.log('❌ Logged out!');
+                console.log('❌ Logged out! Delete session folder.');
             }
 
         } else if (connection === 'open') {
