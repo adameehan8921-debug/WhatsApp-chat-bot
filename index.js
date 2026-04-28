@@ -13,19 +13,7 @@ const chatId = '8481555738';
 // ---------------
 
 // ✅ Telegram bot
-const bot = new TelegramBot(token, { polling: false });
-
-async function startTelegram() {
-    try {
-        await bot.deleteWebHook().catch(() => {});
-        await bot.startPolling();
-        console.log('✅ Telegram started');
-    } catch (err) {
-        console.error('❌ Telegram error:', err.message);
-        setTimeout(startTelegram, 5000);
-    }
-}
-startTelegram();
+const bot = new TelegramBot(token, { polling: true });
 
 // ✅ Express server
 const app = express();
@@ -54,47 +42,43 @@ async function connectToWhatsApp() {
         logger: pino({ level: 'silent' })
     });
 
-    let qrSent = false;
-
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
-        // 📲 QR → PNG → Telegram
-        if (qr && !qrSent) {
-            qrSent = true;
+        // 🔥 ALWAYS send QR
+        if (qr) {
+            console.log('📲 QR generated');
 
             try {
                 const filePath = './qr.png';
 
-                // ✅ Generate PNG file
                 await QRCode.toFile(filePath, qr);
 
-                // ✅ Send as file (better than buffer)
                 await bot.sendPhoto(chatId, fs.createReadStream(filePath), {
-                    caption: '📱 Scan this QR to login WhatsApp'
+                    caption: '📱 Scan quickly (QR expires fast)'
                 });
 
-                console.log('📤 QR PNG sent to Telegram');
-
-                // 🧹 optional: delete file after send
-                fs.unlinkSync(filePath);
+                fs.unlink(filePath, () => {});
+                console.log('✅ QR sent to Telegram');
 
             } catch (err) {
-                console.error('❌ QR send error:', err.message);
+                console.error('❌ QR error:', err.message);
             }
         }
 
         if (connection === 'close') {
-            qrSent = false;
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+
+            console.log('⚠️ Connection closed:', statusCode);
 
             const shouldReconnect = (lastDisconnect?.error instanceof Boom)
-                ? lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut
+                ? statusCode !== DisconnectReason.loggedOut
                 : true;
 
             if (shouldReconnect) {
-                setTimeout(connectToWhatsApp, 5000);
+                setTimeout(connectToWhatsApp, 3000);
             } else {
                 console.log('❌ Logged out!');
             }
@@ -117,6 +101,8 @@ async function connectToWhatsApp() {
                 msg.message?.imageMessage?.caption ||
                 '';
 
+            console.log('📩 Message:', text);
+
             if (text.toLowerCase().includes('hi')) {
                 await sock.sendMessage(msg.key.remoteJid, {
                     text: 'Hello 👋'
@@ -129,4 +115,5 @@ async function connectToWhatsApp() {
     });
 }
 
+// 🚀 Start
 connectToWhatsApp();
