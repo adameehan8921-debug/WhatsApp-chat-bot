@@ -8,8 +8,8 @@ const TelegramBot = require('node-telegram-bot-api');
 const QRCode = require('qrcode');
 
 // --- CONFIG ---
-const token = process.env.TELEGRAM_TOKEN || '8701301869:AAGiFFPQOk-gxZfIm5Irnfv57bqkMlLKcyA';
-const chatId = process.env.CHAT_ID || '8142078717';
+const token = process.env.TELEGRAM_TOKEN || '8635875959:AAFHHj5-DiI4lQ0AiebLa0BcyTwgq51-omM';
+const chatId = process.env.CHAT_ID || '8481555738';
 // ---------------
 
 // ✅ Telegram bot (409 FIX)
