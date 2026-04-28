@@ -1,130 +1,89 @@
 const fs = require('fs');
-
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const express = require('express');
 const TelegramBot = require('node-telegram-bot-api');
 const QRCode = require('qrcode');
+const path = require('path');
 
-// --- CONFIG (DIRECT VALUES) ---
+// --- CONFIG ---
 const token = '8644363775:AAGE3rPVm9Gf1Vf8YMl9ctmiHhOTrIUfDtk';
 const chatId = '8481555738';
-// -----------------------------
+// --------------
 
-// ✅ Telegram bot (safe start to avoid 409)
-const bot = new TelegramBot(token, { polling: false });
-
-(async () => {
-    try {
-        await bot.deleteWebHook().catch(() => {});
-        await bot.startPolling();
-        console.log('✅ Telegram started');
-    } catch (err) {
-        console.error('❌ Telegram error:', err.message);
-    }
-})();
-
-// ✅ Express server
+const bot = new TelegramBot(token, { polling: true });
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.get('/', (req, res) => res.send('✅ WhatsApp Bot Running'));
+app.get('/', (req, res) => res.send('AIRA Group ChatBot is Active 🚀'));
 app.listen(port, () => console.log(`🌐 Server running on port ${port}`));
 
-// 🔥 New session (fix 405 permanently)
-function getSessionPath() {
-    try {
-        fs.mkdirSync('/data', { recursive: true });
-        return '/data/auth_info_baileys_v3'; // 🔥 new session
-    } catch {
-        return './auth_info_baileys_v3';
-    }
-}
+const sessionPath = path.join(__dirname, 'auth_info_baileys');
 
 async function connectToWhatsApp() {
-
-    const { state, saveCreds } = await useMultiFileAuthState(getSessionPath());
+    const { version } = await fetchLatestBaileysVersion();
+    const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
 
     const sock = makeWASocket({
+        version,
         auth: state,
         printQRInTerminal: true,
-        logger: pino({ level: 'silent' })
+        logger: pino({ level: 'silent' }),
+        browser: ['AIRA-Bot', 'Chrome', '1.0.0'] 
     });
 
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
-
-        // 🔥 ALWAYS send QR to Telegram
         if (qr) {
-            console.log('📲 QR generated');
-
             try {
-                const filePath = './qr.png';
-
-                await QRCode.toFile(filePath, qr);
-
-                await bot.sendPhoto(chatId, fs.createReadStream(filePath), {
-                    caption: '📱 Scan this QR FAST ⚡'
-                });
-
-                fs.unlink(filePath, () => {});
-                console.log('✅ QR sent to Telegram');
-
-            } catch (err) {
-                console.error('❌ QR error:', err.message);
-            }
+                const qrPath = './qr.png';
+                await QRCode.toFile(qrPath, qr);
+                await bot.sendPhoto(chatId, fs.createReadStream(qrPath), { caption: 'Scan this QR for ChatBot! ⚡' });
+                if (fs.existsSync(qrPath)) fs.unlinkSync(qrPath);
+            } catch (err) { console.error('QR Error:', err.message); }
         }
-
         if (connection === 'close') {
-            const statusCode = lastDisconnect?.error?.output?.statusCode;
-
-            console.log('⚠️ Connection closed:', statusCode);
-
-            const shouldReconnect = (lastDisconnect?.error instanceof Boom)
-                ? statusCode !== DisconnectReason.loggedOut
-                : true;
-
-            if (shouldReconnect) {
-                console.log('🔁 Reconnecting...');
-                setTimeout(connectToWhatsApp, 4000);
-            } else {
-                console.log('❌ Logged out! Delete session folder.');
-            }
-
+            const shouldReconnect = (lastDisconnect?.error instanceof Boom) ? lastDisconnect.error.output.statusCode !== DisconnectReason.loggedOut : true;
+            if (shouldReconnect) setTimeout(connectToWhatsApp, 5000);
         } else if (connection === 'open') {
-            console.log('✅ WhatsApp Connected!');
-            bot.sendMessage(chatId, '✅ WhatsApp Connected!');
+            bot.sendMessage(chatId, '✅ ChatBot Connected!');
         }
     });
 
-    // 📩 Auto reply
+    // 📩 CHATBOT LOGIC START
     sock.ev.on('messages.upsert', async ({ messages }) => {
         try {
             const msg = messages[0];
             if (!msg.message || msg.key.fromMe) return;
+            
+            const from = msg.key.remoteJid;
+            const text = (msg.message.conversation || msg.message.extendedTextMessage?.text || "").toLowerCase();
 
-            const text =
-                msg.message?.conversation ||
-                msg.message?.extendedTextMessage?.text ||
-                msg.message?.imageMessage?.caption ||
-                '';
-
-            console.log('📩 Message:', text);
-
-            if (text.toLowerCase().includes('hi')) {
-                await sock.sendMessage(msg.key.remoteJid, {
-                    text: 'Hello 👋'
-                });
+            // 🤖 ഇതാണ് ശരിക്കുള്ള ചാറ്റ്ബോട്ട് ഭാഗം (Custom Responses)
+            if (text.includes('hello') || text.includes('hi') || text.includes('ഹായ്')) {
+                await sock.sendMessage(from, { text: 'Hello! How can I help you today? 😊' });
+            } 
+            else if (text.includes('name') || text.includes('പേര്')) {
+                await sock.sendMessage(from, { text: 'My name is AIRA Bot, developed by Adam Eehan. 🦾' });
+            }
+            else if (text.includes('work') || text.includes('എന്താണ് പണി')) {
+                await sock.sendMessage(from, { text: 'I can chat with you and help you with your queries. I am still learning! 🚀' });
+            }
+            else if (text.includes('help') || text.includes('സഹായം')) {
+                await sock.sendMessage(from, { text: 'Sure! Tell me what you need. I can answer your questions.' });
+            }
+            else {
+                // ഒരു കീവേഡും മാച്ച് ആകാത്തപ്പോൾ നൽകുന്ന മറുപടി
+                await sock.sendMessage(from, { text: 'That is interesting! Tell me more about it. 🤖' });
             }
 
         } catch (err) {
-            console.error('❌ Message error:', err);
+            console.error('Chat Logic Error:', err);
         }
     });
 }
 
-// 🚀 Start
-connectToWhatsApp();
+connectToWhatsApp().catch(err => console.log("Unexpected Error: " + err));
