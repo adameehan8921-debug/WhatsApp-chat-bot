@@ -9,7 +9,7 @@ const path = require('path');
 
 // --- CONFIG ---
 const token = '8644363775:AAGE3rPVm9Gf1Vf8YMl9ctmiHhOTrIUfDtk';
-const chatId = '8481555738';
+const chatId = '8142078717';
 // --------------
 
 const bot = new TelegramBot(token, { polling: true });
