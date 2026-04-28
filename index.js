@@ -8,7 +8,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const QRCode = require('qrcode');
 
 // --- CONFIG ---
-const token = '8635875959:AAFHHj5-DiI4lQ0AiebLa0BcyTwgq51-omM';
+const token = '8782721674:AAHdYo7wxyJfhd7_3DJ3FYb6nj1i0CqDuWg';
 const chatId = '8481555738';
 // ---------------
 
